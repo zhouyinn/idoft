@@ -1,0 +1,51 @@
+# This workflow will build a package using Maven and then publish it to GitHub packages when a release is created
+# For more information see: https://github.com/actions/setup-java/blob/main/docs/advanced-usage.md#apache-maven-with-a-settings-path
+
+name: Confirming Test Is Flaky
+
+on: [workflow_dispatch]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up JDK 8
+      uses: actions/setup-java@v3
+      with:
+        java-version: '8'
+        distribution: 'temurin'
+        server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
+        settings-path: ${{ github.workspace }} # location for the settings.xml file
+    
+    - name: Clone apache/druid repository
+      uses: actions/checkout@v3
+      with:
+        repository: apache/druid
+        ref: master
+        path: druid
+
+    - name: Print the latest commit
+      run: |
+        ls
+        git rev-parse HEAD
+      
+    - name: Compile the module where the test is, and all modules it depends on
+      run: |
+        cd druid
+        mvn clean install -DskipTests -pl org.apache.druid:druid-processing -am
+
+    - name: Run the test to check that it passes
+      run: |
+        cd druid
+        mvn -pl org.apache.druid:druid-processing test -Dtest="org.apache.druid.java.util.emitter.core.EmitterTest#testBasicAuthenticationAndNewlineSeparating"
+
+    - name: Run the test with the NonDex tool
+      run: |
+        cd druid
+        mvn -pl org.apache.druid:druid-processing edu.illinois:nondex-maven-plugin:2.1.1:nondex -Dtest="org.apache.druid.java.util.emitter.core.EmitterTest#testBasicAuthenticationAndNewlineSeparating"
